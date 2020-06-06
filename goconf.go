@@ -37,6 +37,7 @@ func LoadConf(fileName string, model string) (*GlassConf, error) {
 	}
 	conf := new(GlassConf)
 	conf.fileName = fileName
+	conf.data = make(map[string]string)
 	err := parseConfFile(conf, model)
 	if err != nil {
 		e := ConfError{"conf parse failed"}
@@ -46,13 +47,18 @@ func LoadConf(fileName string, model string) (*GlassConf, error) {
 	return conf, nil
 }
 
-
+/**
+ * @Description: 加载配置文件
+ * @param {type} 
+ * @return: 
+ */
 func parseConfFile(conf *GlassConf, model string) error {
 	var sectionSlice []string
 
 	//read file
 	fd, err := os.Open(conf.fileName)
 	if err != nil {
+		fmt.Println("conf file open failed")
 		e := ConfError{"conf file open failed"}
 		return e
 	}
@@ -63,11 +69,17 @@ func parseConfFile(conf *GlassConf, model string) error {
 		if isEof == io.EOF {
 			break
 		}
+		if len(line) == 0 {
+			continue
+		}
+		
 		str := string(line)
 		//处理配置项
-		if ! isSection(str) {
-			option := strings.Split(str, ":")
+		sectionContent, isSection := isSection(str)
+		if ! isSection {
+			option := strings.Split(str, "=")
 			if len(option) != 2 {
+				fmt.Println("conf file option format error")
 				e := ConfError{"conf file option format error"}
 				return e
 			}
@@ -79,8 +91,9 @@ func parseConfFile(conf *GlassConf, model string) error {
 			continue
 		}
 		//处理配置段
-		level, sectionName, err := getLevel(str)
+		level, sectionName, err := getLevel(sectionContent)
 		if err != nil {
+			fmt.Println("conf file section format error, illegal secion="+str)
 			e := ConfError{"conf file section format error, illegal secion="+str}
 			return e
 		}
@@ -93,43 +106,49 @@ func parseConfFile(conf *GlassConf, model string) error {
 			sectionSlice = append(sectionSlice, sectionName)
 		}
 	}
+
+	return nil
 }
 
-func getLevel(confStr string) (int, string, error) {
+/**
+ * @Description: 获取配置段的层级
+ * @param {type} 
+ * @return: 
+ */
+func getLevel(confSection string) (int, string, error) {
 	var level int
 	var sectionName string
 
-	sectionRegex := regexp.MustCompile(`^\[([.]*[a-zA-Z0-9_]+)\]$`)
-	params := sectionRegex.FindStringSubmatch(confStr)
-	if len(params) != 2 {
-		e := ConfError{"conf file section format error"}
-		return level, sectionName, e;
-	}
-	index := strings.LastIndex(params[1], ".")
+	index := strings.LastIndex(confSection, ".")
 	//不存在段名
-	if index == strings.Count(params[1], "") - 2 {
+	if index == strings.Count(confSection, "") - 2 {
 		e := ConfError{"conf file section format error"}
 		return level, sectionName, e;
 	}
 	if index == -1 {
-		sectionName = params[1]
+		sectionName = confSection
 		level = 0
 	} else {
-		sectionName = params[1][index+1:]
+		sectionName = confSection[index+1:]
 		level = index + 1
 	}
 
 	return level, sectionName, nil
 }
 
-func isSection(confStr string) bool {
-	str := strings.TrimSpace(confStr)
-	len := strings.Count(str, "") - 1
-	if str[0] == '[' && str[len - 1] == ']' {
-		return true
+/**
+ * @Description: 判断是否是一个配置段名
+ * @param {type} 
+ * @return: 
+ */
+func isSection(confStr string) (string, bool) {
+	sectionRegex := regexp.MustCompile(`^\[([.]*[a-zA-Z0-9_-]+)\]$`)
+	params := sectionRegex.FindStringSubmatch(confStr)
+	if len(params) != 2 {
+		return "", false;
 	}
 
-	return false
+	return params[1], true
 }
 
 func (err ConfError) Error() string {
